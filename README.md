@@ -217,17 +217,26 @@ node --test --test-isolation=none tests/*.test.js
 
 ## Публікація
 
-1. Додати DNS-запис `map.datsiuk.com` для свого сервера.
-2. Вказати цю папку коренем сайту або завантажити `index.html`, `assets/`
-   та `.htaccess` у корінь піддомену. Тести й README публікувати необов’язково.
-3. Увімкнути HTTPS. Зберегти видимі посилання на джерела даних.
-4. Якщо хостинг задає CSP, дозволити власні статичні файли, а також
-   `s3-us-west-2.amazonaws.com`, `wayback.maptiles.arcgis.com`,
-   `services.arcgisonline.com`, `planetarycomputer.microsoft.com`
-   `clarity.maptiles.arcgis.com`, `api.maptiler.com`, `api.mapbox.com`
-   і `nominatim.openstreetmap.org` для потрібних зображень/запитів.
-5. Після запуску налаштувати редирект зі старого `datsiuk.com/map/` і оновити
+Сайт публікується через **GitHub Pages** з гілки `main`, корінь репозиторію.
+Файл `CNAME` задає власний домен `map.datsiuk.com`; адреса
+`datsiuk7.github.io/map.datsiuk.com/` автоматично переадресовується на нього.
+`.nojekyll` вимикає обробку Jekyll, щоб файли віддавалися як є.
+
+1. GitHub → **Settings → Pages**: Source — *Deploy from a branch*,
+   гілка `main`, папка `/ (root)`. Custom domain — `map.datsiuk.com`.
+2. У DNS домену `datsiuk.com` додати запис
+   `CNAME  map  →  datsiuk7.github.io.`
+3. Коли перевірка DNS пройде, увімкнути **Enforce HTTPS**.
+4. Після запуску налаштувати редирект зі старого `datsiuk.com/map/` і оновити
    посилання основного сайту за потреби.
 
-DNS і віддалений хостинг цим редагуванням не змінювалися.
-Оригінал основного сайту: `D:\OSPanel\home\datsiuk.local\public\map\index.html`.
+GitHub Pages не читає `.htaccess`: його правила потрібні лише на Apache.
+Referrer-Policy задано також через `<meta name="referrer">` в `index.html`.
+Pages віддає всі файли з `Cache-Control: max-age=600`, тому версії `?v=`
+у `index.html` слід оновлювати при кожній зміні ресурсів.
+
+Якщо хостинг задає CSP, дозволити власні статичні файли, а також
+`s3-us-west-2.amazonaws.com`, `wayback.maptiles.arcgis.com`,
+`services.arcgisonline.com`, `planetarycomputer.microsoft.com`,
+`clarity.maptiles.arcgis.com`, `api.maptiler.com`, `api.mapbox.com`,
+`api.gamma.earth` і `nominatim.openstreetmap.org`.
