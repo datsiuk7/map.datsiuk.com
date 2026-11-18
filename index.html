@@ -11,7 +11,7 @@
     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin=""
   >
-  <link rel="stylesheet" href="./assets/map.css?v=20261031-keys-1">
+  <link rel="stylesheet" href="./assets/map.css?v=20261118-photo-1">
   <link rel="preconnect" href="https://planetarycomputer.microsoft.com" crossorigin>
   <link rel="preconnect" href="https://wayback.maptiles.arcgis.com" crossorigin>
 </head>
@@ -113,6 +113,8 @@
         <small class="date-meta">Доступні дати визначаємо в центрі карти</small>
       </div>
       <div class="control actions">
+        <button id="photoButton" class="button" type="button" title="Зібрати видиму ділянку з найдетальніших тайлів провайдера"><span aria-hidden="true">📷</span> <span class="share-full">Чітке фото</span><span class="share-short">Фото</span></button>
+        <button id="historyButton" class="button secondary" type="button" aria-haspopup="dialog" title="Зроблені фото, збережені в цьому браузері">Історія <span id="historyCount" class="history-count"></span></button>
         <button id="shareButton" class="button secondary" type="button" aria-label="Копіювати лінк" title="Копіювати лінк"><span class="share-full">Копіювати лінк</span><span class="share-short" aria-hidden="true">Лінк</span></button>
       </div>
       </div>
@@ -192,6 +194,34 @@
       </form>
     </dialog>
 
+    <dialog id="photosDialog" class="connections-dialog photos-dialog" aria-labelledby="photosTitle" aria-describedby="photosIntro">
+      <div class="photos-body">
+        <header class="connections-header">
+          <div><h1 id="photosTitle">Історія фото</h1><p id="photosIntro">Фото зберігаються лише в цьому браузері. Тайли беруться з найглибшого рівня, який реально має провайдер.</p></div>
+          <button id="closePhotos" class="icon-button close-dialog" type="button" aria-label="Закрити історію">×</button>
+        </header>
+        <section id="photoViewer" class="photo-viewer" hidden aria-label="Перегляд фото">
+          <div class="photo-viewer-bar">
+            <strong id="viewerTitle"></strong>
+            <span id="viewerMeta" class="photo-meta"></span>
+          </div>
+          <div id="viewerFrame" class="photo-frame fit" tabindex="0" title="Клацніть, щоб перемкнути «вмістити / 100%»"><img id="viewerImage" alt=""></div>
+          <div class="photo-actions">
+            <button id="viewerZoom" class="button secondary" type="button">100%</button>
+            <a id="viewerDownload" class="button secondary" download>Завантажити</a>
+            <button id="viewerMap" class="button secondary" type="button">Показати на карті</button>
+            <button class="button enhance-button" data-scale="2" type="button" title="ШІ домальовує правдоподібні деталі; це не нові дані зйомки">ШІ ×2</button>
+            <button class="button enhance-button" data-scale="4" type="button" title="ШІ домальовує правдоподібні деталі; це не нові дані зйомки">ШІ ×4</button>
+            <button id="viewerDelete" class="text-button" type="button">Видалити</button>
+          </div>
+          <p id="enhanceStatus" class="keys-save-status" role="status" aria-live="polite"></p>
+        </section>
+        <p id="photosEmpty" class="keyless-note">Ще немає фото. Наблизьте потрібне місце й натисніть «Чітке фото».</p>
+        <ul id="photoList" class="photo-list"></ul>
+        <footer class="connections-footer"><button id="clearPhotos" class="text-button" type="button">Очистити історію</button><span id="photosUsage" class="photo-meta"></span></footer>
+      </div>
+    </dialog>
+
     <div class="badges">
       <div id="leftBadge" class="badge">Завантаження...</div>
       <div id="rightBadge" class="badge">Завантаження...</div>
@@ -222,18 +252,22 @@
   <script type="importmap">
   {
     "imports": {
-      "./assets/catalog.js": "./assets/catalog.js?v=20261031-keys-1",
-      "./assets/providers.js": "./assets/providers.js?v=20261031-keys-1",
-      "./assets/performance.js": "./assets/performance.js?v=20261031-keys-1",
-      "./assets/wayback-fallback.js": "./assets/wayback-fallback.js?v=20261031-keys-1",
-      "./assets/basemaps.js": "./assets/basemaps.js?v=20261031-keys-1",
-      "./assets/provider-health.js": "./assets/provider-health.js?v=20261031-keys-1",
-      "./assets/credentials.js": "./assets/credentials.js?v=20261031-keys-1",
-      "./assets/connection-checks.js": "./assets/connection-checks.js?v=20261031-keys-1",
-      "./assets/connections-ui.js": "./assets/connections-ui.js?v=20261031-keys-1"
+      "./assets/catalog.js": "./assets/catalog.js?v=20261118-photo-1",
+      "./assets/providers.js": "./assets/providers.js?v=20261118-photo-1",
+      "./assets/performance.js": "./assets/performance.js?v=20261118-photo-1",
+      "./assets/wayback-fallback.js": "./assets/wayback-fallback.js?v=20261118-photo-1",
+      "./assets/basemaps.js": "./assets/basemaps.js?v=20261118-photo-1",
+      "./assets/provider-health.js": "./assets/provider-health.js?v=20261118-photo-1",
+      "./assets/credentials.js": "./assets/credentials.js?v=20261118-photo-1",
+      "./assets/connection-checks.js": "./assets/connection-checks.js?v=20261118-photo-1",
+      "./assets/connections-ui.js": "./assets/connections-ui.js?v=20261118-photo-1",
+      "./assets/snapshot.js": "./assets/snapshot.js?v=20261118-photo-1",
+      "./assets/snapshot-store.js": "./assets/snapshot-store.js?v=20261118-photo-1",
+      "./assets/enhance.js": "./assets/enhance.js?v=20261118-photo-1",
+      "./assets/photos-ui.js": "./assets/photos-ui.js?v=20261118-photo-1"
     }
   }
   </script>
-  <script type="module" src="./assets/app.js?v=20261031-keys-1"></script>
+  <script type="module" src="./assets/app.js?v=20261118-photo-1"></script>
 </body>
 </html>

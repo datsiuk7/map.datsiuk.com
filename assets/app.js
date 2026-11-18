@@ -6,6 +6,7 @@ import { BASEMAPS, isBasemap } from './basemaps.js';
 import { ProviderHealth, providerLabel } from './provider-health.js';
 import { credentials, KEY_SOURCES, redactSecrets } from './credentials.js';
 import { setupConnections } from './connections-ui.js';
+import { setupPhotos } from './photos-ui.js';
 
 const $ = id => document.getElementById(id);
 const app = document.querySelector('.app');
@@ -798,6 +799,45 @@ credentials.subscribe(changed => {
   }
   updateImageryAttribution(); renderProviderHealth();
   checkProviders();
+});
+
+function photoCredits(layer) {
+  if (layer.source === 'landsat') return 'NASA / USGS Landsat · Microsoft Planetary Computer';
+  if (layer.source === 'esri') return `Esri World Imagery Wayback${layer.attribution ? ` · ${layer.attribution}` : ''}`;
+  return layer.attribution || layer.title || SOURCES[layer.source].name;
+}
+
+// Describes what each visible map shows, so the photo covers exactly that area.
+function photoTargets() {
+  return Object.values(views).filter(view => isActive(view) && view.tile && view.displayedLayer && view.tile._url).map(view => {
+    const layer = view.displayedLayer, size = view.map.getSize(), bounds = view.tile.options.bounds && L.latLngBounds(view.tile.options.bounds);
+    const nativeZoom = view.tile.options.maxNativeZoom ?? 18;
+    return {
+      side: view.side, sideName: view.side === 'left' ? 'Ліва карта' : 'Права карта',
+      template: view.tile._url, source: layer.source, layerId: layer.id,
+      nativeZoom: isBasemap(layer.source) ? layer.nativeZoom ?? nativeZoom : nativeZoom, displayZoom: nativeZoom,
+      bounds: bounds ? [[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]] : null,
+      center: view.map.getCenter().wrap(), zoom: view.map.getZoom(), width: size.x, height: size.y,
+      magnification: visualZoom / 100,
+      title: isBasemap(layer.source) ? layer.shortName : SOURCES[layer.source].name,
+      label: isBasemap(layer.source) ? layer.label : formatDate(layer.date),
+      credits: `${photoCredits(layer)} · map.datsiuk.com`
+    };
+  });
+}
+
+setupPhotos({
+  getTargets: photoTargets,
+  showStatus,
+  onShowOnMap(record) {
+    views.left.map.setView([record.center.lat, record.center.lng], record.zoom, { animate: false });
+    if (record.magnification > 1) {
+      $('visualZoomToggle').checked = true;
+      $('visualZoom').value = String(Math.round(record.magnification * 100));
+      setVisualZoom();
+    }
+    showStatus(`Місце фото: ${record.title} · ${record.label}. Джерело на карті могло змінитися.`, 'info', 6000);
+  }
 });
 
 ready = true;
