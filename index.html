@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Порівняння супутникових карт за роками</title>
+  <link
+    rel="stylesheet"
+    href="./assets/vendor/leaflet-1.9.4/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  >
+  <link rel="stylesheet" href="./assets/map.css?v=20261031-keys-1">
+  <link rel="preconnect" href="https://planetarycomputer.microsoft.com" crossorigin>
+  <link rel="preconnect" href="https://wayback.maptiles.arcgis.com" crossorigin>
+</head>
+<body>
+  <main class="app">
+    <section id="stage" class="map-stage" aria-label="Порівняння карт">
+      <div id="leftClip" class="map-clip left">
+        <div id="leftMap" class="map-canvas"></div>
+      </div>
+      <div id="rightClip" class="map-clip right">
+        <div id="rightMap" class="map-canvas"></div>
+      </div>
+      <span class="map-center" aria-hidden="true"></span>
+      <div id="divider" class="divider" role="separator" aria-orientation="vertical" aria-label="Дільник карт" aria-valuemin="12" aria-valuemax="88" aria-valuenow="50" tabindex="0">
+        <div class="divider-handle"></div>
+      </div>
+    </section>
+
+    <form id="toolbar" class="toolbar">
+      <div class="mode-row">
+        <label class="single-map-label" for="singleMapToggle">
+          <input id="singleMapToggle" type="checkbox" autocomplete="off">
+          <span>Одна карта</span>
+        </label>
+        <span id="modeHint">Порівняння двох дат</span>
+        <button id="connectionsButton" class="button secondary connections-button" type="button" aria-haspopup="dialog">API-ключі</button>
+      </div>
+      <section id="leftControls" class="control date-card" aria-label="Налаштування лівої карти">
+        <label for="leftProvider">Провайдер ліворуч</label>
+        <select id="leftProvider" autocomplete="off">
+          <optgroup label="Детальні супутникові карти">
+            <option value="maptiler">MapTiler Satellite</option>
+            <option value="mapbox">Mapbox Satellite</option>
+            <option value="esri-live">Esri — поточна карта</option>
+            <option value="esri-clarity">Esri Clarity — архів</option>
+          </optgroup>
+          <optgroup label="Детальний архів за датами">
+          <option value="esri">Esri Wayback</option>
+          </optgroup>
+          <optgroup label="Оглядові знімки за датами">
+            <option value="landsat">Landsat · 30 м/пікс.</option>
+          </optgroup>
+        </select>
+        <div class="period-filters">
+          <div class="control"><label for="leftYear">Рік</label><select id="leftYear" autocomplete="off"></select></div>
+          <div class="control"><label for="leftMonth">Місяць</label><select id="leftMonth" autocomplete="off"></select></div>
+        </div>
+        <label for="leftLayer">Дата ліворуч</label>
+        <div class="date-row">
+          <select id="leftLayer" autocomplete="off" aria-describedby="leftSource leftMeta"></select>
+          <span id="leftSource" class="source-label" aria-live="polite"></span>
+        </div>
+        <div class="date-navigation" role="group" aria-label="Перемикання дат ліворуч">
+          <button id="leftPrevious" class="date-step" type="button" aria-label="Попередня дата ліворуч" disabled>←</button>
+          <span id="leftPosition" class="date-position"></span>
+          <button id="leftNext" class="date-step" type="button" aria-label="Наступна дата ліворуч" disabled>→</button>
+        </div>
+        <small id="leftMeta" class="date-meta"></small>
+      </section>
+      <section id="rightControls" class="control date-card" aria-label="Налаштування правої карти">
+        <label for="rightProvider">Провайдер праворуч</label>
+        <select id="rightProvider" autocomplete="off">
+          <optgroup label="Детальні супутникові карти">
+            <option value="maptiler">MapTiler Satellite</option>
+            <option value="mapbox">Mapbox Satellite</option>
+            <option value="esri-live">Esri — поточна карта</option>
+            <option value="esri-clarity">Esri Clarity — архів</option>
+          </optgroup>
+          <optgroup label="Детальний архів за датами">
+          <option value="esri">Esri Wayback</option>
+          </optgroup>
+          <optgroup label="Оглядові знімки за датами">
+            <option value="landsat">Landsat · 30 м/пікс.</option>
+          </optgroup>
+        </select>
+        <div class="period-filters">
+          <div class="control"><label for="rightYear">Рік</label><select id="rightYear" autocomplete="off"></select></div>
+          <div class="control"><label for="rightMonth">Місяць</label><select id="rightMonth" autocomplete="off"></select></div>
+        </div>
+        <label for="rightLayer">Дата праворуч</label>
+        <div class="date-row">
+          <select id="rightLayer" autocomplete="off" aria-describedby="rightSource rightMeta"></select>
+          <span id="rightSource" class="source-label" aria-live="polite"></span>
+        </div>
+        <div class="date-navigation" role="group" aria-label="Перемикання дат праворуч">
+          <button id="rightPrevious" class="date-step" type="button" aria-label="Попередня дата праворуч" disabled>←</button>
+          <span id="rightPosition" class="date-position"></span>
+          <button id="rightNext" class="date-step" type="button" aria-label="Наступна дата праворуч" disabled>→</button>
+        </div>
+        <small id="rightMeta" class="date-meta"></small>
+      </section>
+      <div class="utility-row">
+      <div class="control search-control">
+        <label for="searchBox">Пошук місця</label>
+        <div class="search-row">
+          <input id="searchBox" type="search" placeholder="Київ, Буча, Irpin..." autocomplete="off">
+          <button class="button" type="submit">Пошук</button>
+        </div>
+        <small class="date-meta">Доступні дати визначаємо в центрі карти</small>
+      </div>
+      <div class="control actions">
+        <button id="shareButton" class="button secondary" type="button" aria-label="Копіювати лінк" title="Копіювати лінк"><span class="share-full">Копіювати лінк</span><span class="share-short" aria-hidden="true">Лінк</span></button>
+      </div>
+      </div>
+      <div class="options-row">
+      <div class="control">
+        <label class="checkbox-label" for="visualZoomToggle">
+          <input id="visualZoomToggle" type="checkbox" autocomplete="off">
+          <span>Наближення</span>
+        </label>
+      </div>
+      <div id="visualZoomControl" class="control" hidden>
+        <label for="visualZoom">Масштабування</label>
+        <div class="visual-zoom-row">
+          <input id="visualZoom" type="range" min="100" max="1000" step="10" value="100" autocomplete="off">
+          <output id="visualZoomValue" for="visualZoom">100%</output>
+        </div>
+      </div>
+      <div class="control">
+        <label class="checkbox-label" for="labelsToggle">
+          <input id="labelsToggle" type="checkbox" autocomplete="off">
+          <span>Назви міст</span>
+        </label>
+      </div>
+      <div class="control">
+        <label class="checkbox-label" for="separateModeToggle">
+          <input id="separateModeToggle" type="checkbox" autocomplete="off">
+          <span>Дві карти</span>
+        </label>
+      </div>
+      <div class="control">
+        <label class="checkbox-label" for="hideSliderToggle">
+          <input id="hideSliderToggle" type="checkbox" autocomplete="off">
+          <span>Без повзунка</span>
+        </label>
+      </div>
+      </div>
+      <div class="catalog-row" title="Дати визначаються для центру карти. Landsat: хмарність усієї сцени до 30%.">
+        <span id="catalogStatus" role="status" aria-live="polite">Завантажуємо доступні дати…</span>
+        <span class="catalog-note" title="Хмарність оцінена для всієї сцени, тому окремі хмари можуть бути над центром карти.">Landsat: хмарність сцени до 30%</span>
+        <button id="retryCatalog" class="retry-button" type="button" hidden>Повторити</button>
+      </div>
+    </form>
+    <button id="panelToggle" class="panel-toggle" type="button" aria-expanded="true">Сховати</button>
+
+    <dialog id="connectionsDialog" class="connections-dialog" aria-labelledby="connectionsTitle" aria-describedby="connectionsIntro">
+      <form id="connectionsForm" method="dialog" autocomplete="off">
+        <header class="connections-header">
+          <div><h1 id="connectionsTitle">Підключення карт</h1><p id="connectionsIntro">Власні ключі для ваших карт і знімків.</p></div>
+          <button id="closeConnections" class="icon-button" type="button" aria-label="Закрити налаштування">×</button>
+        </header>
+        <p class="keyless-note">Esri, Esri Clarity, Wayback і Landsat працюють без ключів.</p>
+        <section class="connection-card" data-connection="maptiler" aria-labelledby="maptilerKeyLabel">
+          <div class="connection-heading"><label id="maptilerKeyLabel" for="maptilerKey">MapTiler Satellite</label><a href="https://cloud.maptiler.com/" target="_blank" rel="noopener noreferrer">Отримати ключ ↗</a></div>
+          <div class="key-input-row"><input id="maptilerKey" type="password" placeholder="MapTiler API key" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="1024" aria-describedby="maptilerKeyHint maptilerKeyStatus"><button class="icon-button reveal-key" data-source="maptiler" type="button" aria-label="Показати ключ MapTiler" aria-pressed="false">Показати</button></div>
+          <p id="maptilerKeyHint" class="connection-hint">Використовується тільки для супутникових карт MapTiler.</p>
+          <div class="connection-result"><span id="maptilerKeyStatus" role="status" aria-live="polite">Ключ не додано</span><button class="button secondary check-key" data-source="maptiler" type="button">Перевірити MapTiler</button></div>
+        </section>
+        <section class="connection-card" data-connection="mapbox" aria-labelledby="mapboxKeyLabel">
+          <div class="connection-heading"><label id="mapboxKeyLabel" for="mapboxKey">Mapbox Satellite</label><a href="https://console.mapbox.com/" target="_blank" rel="noopener noreferrer">Отримати токен ↗</a></div>
+          <div class="key-input-row"><input id="mapboxKey" type="password" placeholder="pk.… — публічний токен" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="1024" aria-describedby="mapboxKeyHint mapboxKeyStatus"><button class="icon-button reveal-key" data-source="mapbox" type="button" aria-label="Показати ключ Mapbox" aria-pressed="false">Показати</button></div>
+          <p id="mapboxKeyHint" class="connection-hint">Потрібен публічний токен pk. з доступом до супутникових карт.</p>
+          <div class="connection-result"><span id="mapboxKeyStatus" role="status" aria-live="polite">Ключ не додано</span><button class="button secondary check-key" data-source="mapbox" type="button">Перевірити Mapbox</button></div>
+        </section>
+        <section class="connection-card" data-connection="gamma" aria-labelledby="gammaKeyLabel">
+          <div class="connection-heading"><label id="gammaKeyLabel" for="gammaKey">Gamma Earth · S2DR3</label><a href="https://app.gamma.earth/" target="_blank" rel="noopener noreferrer">Отримати ключ ↗</a></div>
+          <div class="key-input-row"><input id="gammaKey" type="password" placeholder="Gamma Earth API key" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="1024" aria-describedby="gammaKeyHint gammaKeyStatus"><button class="icon-button reveal-key" data-source="gamma" type="button" aria-label="Показати ключ Gamma Earth" aria-pressed="false">Показати</button></div>
+          <p id="gammaKeyHint" class="connection-hint">Перевірка читає баланс і не запускає обробку. Для автоматичного API потрібен відповідний тариф.</p>
+          <div class="connection-result"><span id="gammaKeyStatus" role="status" aria-live="polite">Ключ не додано</span><button class="button secondary check-key" data-source="gamma" type="button">Перевірити Gamma Earth</button></div>
+          <details class="s2dr-help"><summary>Як спробувати S2DR3 безкоштовно</summary><p>Відкрийте <a href="https://colab.research.google.com/drive/18phbwA1iYG5VDGN2WjK7WrWYi-FdCHJ5" target="_blank" rel="noopener noreferrer">офіційний блокнот Colab</a>, виберіть T4 GPU та додайте свій ключ у Secrets під назвою GE_API_KEY. Ключ із цієї сторінки автоматично не передається в Colab.</p><p><a href="./experiments/s2dr3/kyiv-trial.ipynb" download>Завантажити підготовлену пробу для Києва · 4 × 4 км</a></p></details>
+        </section>
+        <div class="key-storage-options">
+          <label for="rememberKeys"><input id="rememberKeys" type="checkbox">Запам’ятати на цьому пристрої</label>
+          <p>Без галочки — до закриття вкладки. Ключі передаються безпосередньо вибраному сервісу, не додаються до посилань і не надсилаються на сервер цього сайту.</p>
+        </div>
+        <p id="keysSaveStatus" class="keys-save-status" role="status" aria-live="polite"></p>
+        <footer class="connections-footer"><button id="forgetKeys" class="text-button" type="button">Видалити всі ключі</button><button class="button" type="submit">Застосувати</button></footer>
+      </form>
+    </dialog>
+
+    <div class="badges">
+      <div id="leftBadge" class="badge">Завантаження...</div>
+      <div id="rightBadge" class="badge">Завантаження...</div>
+    </div>
+
+    <div id="status" class="status" hidden></div>
+    <footer class="attribution">
+      <div id="providerLogos" class="provider-logos" hidden>
+        <a data-imagery-sources="maptiler" href="https://www.maptiler.com/" target="_blank" rel="noopener noreferrer" hidden><img src="./assets/branding/maptiler-logo.svg" alt="MapTiler" height="20"></a>
+        <a data-imagery-sources="mapbox" href="https://www.mapbox.com/" target="_blank" rel="noopener noreferrer" hidden><img src="./assets/branding/mapbox-logo.svg" alt="Mapbox" height="20"></a>
+      </div>
+      <span id="imageryAttribution" class="imagery-attribution"></span>
+      <span data-imagery-sources="esri esri-live esri-clarity" hidden><a href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener noreferrer">Esri World Imagery</a> · </span>
+      <span data-imagery-sources="maptiler" hidden><a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener noreferrer">© MapTiler</a> · </span>
+      <span data-imagery-sources="mapbox" hidden><a href="https://www.mapbox.com/about/maps/" target="_blank" rel="noopener noreferrer">© Mapbox</a> · <a href="https://www.maxar.com/" target="_blank" rel="noopener noreferrer">© Maxar</a> · <a href="https://www.mapbox.com/contribute/" target="_blank" rel="noopener noreferrer">Improve this map</a> · </span>
+      <span data-imagery-sources="landsat" hidden><a href="https://www.usgs.gov/landsat-missions" target="_blank" rel="noopener noreferrer">NASA / USGS Landsat</a> · </span>
+      <span data-imagery-sources="landsat" hidden><a href="https://planetarycomputer.microsoft.com/" target="_blank" rel="noopener noreferrer">Microsoft Planetary Computer</a> · </span>
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a>
+    </footer>
+    <noscript>Для роботи карти увімкніть JavaScript у браузері.</noscript>
+  </main>
+
+  <script
+    src="./assets/vendor/leaflet-1.9.4/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "./assets/catalog.js": "./assets/catalog.js?v=20261031-keys-1",
+      "./assets/providers.js": "./assets/providers.js?v=20261031-keys-1",
+      "./assets/performance.js": "./assets/performance.js?v=20261031-keys-1",
+      "./assets/wayback-fallback.js": "./assets/wayback-fallback.js?v=20261031-keys-1",
+      "./assets/basemaps.js": "./assets/basemaps.js?v=20261031-keys-1",
+      "./assets/provider-health.js": "./assets/provider-health.js?v=20261031-keys-1",
+      "./assets/credentials.js": "./assets/credentials.js?v=20261031-keys-1",
+      "./assets/connection-checks.js": "./assets/connection-checks.js?v=20261031-keys-1",
+      "./assets/connections-ui.js": "./assets/connections-ui.js?v=20261031-keys-1"
+    }
+  }
+  </script>
+  <script type="module" src="./assets/app.js?v=20261031-keys-1"></script>
+</body>
+</html>
