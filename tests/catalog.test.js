@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SOURCES, readState, providerForId, providerChoices, filterDates, adjacentLayer, layoutSizes, dateChoices, selectLayer, coversPoint, LatestRequest, tileCoordinates } from '../assets/catalog.js';
-import { loadCatalog, loadScenes, loadSceneById, sceneLayer, fetchJson, localWayback } from '../assets/providers.js';
+import { loadCatalog, loadScenes, loadSceneById, sceneLayer, fetchJson, localWayback, tileDefinition } from '../assets/providers.js';
 import { fallbackLayers } from '../assets/wayback-fallback.js';
 
 const layer = (id, date, source = 'esri', extra = {}) => ({ id, date, source, ...extra });
@@ -191,31 +191,32 @@ test('single mode uses the full canvas and gives the second map no visible area'
   assert.deepEqual(layoutSizes(1280,.25,false,false),{left:320,right:960,separate:false});
 });
 
-test('retired Sentinel URLs restore current Esri without retaining the retired scene', () => {
-  assert.equal(Object.hasOwn(SOURCES, 'sentinel'), false);
-  assert.equal(providerForId('sentinel:old-scene'), 'esri-live');
-  for (const query of [
-    'left=sentinel%3Aold-scene&right=sentinel%3Anew-scene',
-    'leftProvider=sentinel&rightProvider=sentinel',
-    'left=sentinel%3Aold-scene&leftProvider=sentinel&right=sentinel%3Anew-scene&rightProvider=sentinel'
-  ]) {
-    const state = readState(new URL(`https://map.test/?${query}#17/50.45/30.52`));
-    assert.equal(state.leftProvider, 'esri-live');
-    assert.equal(state.rightProvider, 'esri-live');
-    assert.equal(state.left, null); assert.equal(state.right, null);
-    assert.equal(state.zoom, 17); assert.equal(state.center[0], 50.45);
-    assert.ok(Math.abs(state.center[1] - 30.52) < 1e-9);
-  }
-  const mixed = readState(new URL('https://map.test/?left=sentinel%3Aold&right=landsat%3Avalid'));
-  assert.equal(mixed.leftProvider, 'esri-live'); assert.equal(mixed.left, null);
-  assert.equal(mixed.rightProvider, 'landsat'); assert.equal(mixed.right, 'landsat:valid');
+test('Sentinel-2 links restore the shared fresh scene and provider', () => {
+  assert.equal(SOURCES.sentinel.name, 'Sentinel-2');
+  assert.equal(providerForId('sentinel:S2C_MSIL2A_20261115'), 'sentinel');
+  const state = readState(new URL('https://map.test/?left=sentinel%3AS2C_old&right=landsat%3Avalid#17/50.45/30.52'));
+  assert.equal(state.leftProvider, 'sentinel'); assert.equal(state.left, 'sentinel:S2C_old');
+  assert.equal(state.rightProvider, 'landsat'); assert.equal(state.right, 'landsat:valid');
+  const explicit = readState(new URL('https://map.test/?leftProvider=sentinel&rightProvider=sentinel'));
+  assert.equal(explicit.leftProvider, 'sentinel'); assert.equal(explicit.rightProvider, 'sentinel');
 });
 
-test('retired Sentinel catalogues and shared scenes do not fetch data', async () => {
-  const unexpectedFetch = () => { throw new Error('A retired source must not be requested'); };
+test('Sentinel-2 scenes come from Planetary Computer at 10 m and z14', async () => {
   const center = { lat: 50.45, lng: 30.52 };
-  assert.deepEqual(await loadCatalog('sentinel', [], center, 17), []);
-  assert.deepEqual(await loadScenes('sentinel', center, undefined, unexpectedFetch), []);
-  assert.equal(await loadSceneById('sentinel:old-scene', undefined, unexpectedFetch), null);
-  assert.equal(sceneLayer(scene('old-scene', '2026-10-01', 'sentinel-2-l2a')), null);
+  const layers = await loadScenes('sentinel', center, undefined, async url => {
+    assert.equal(new URL(url).searchParams.get('collections'), 'sentinel-2-l2a');
+    return response({ features: [scene('S2C_MSIL2A_20261115', '2026-11-15', 'sentinel-2-l2a')], links: [] });
+  });
+  assert.equal(layers.length, 1);
+  assert.equal(layers[0].id, 'sentinel:S2C_MSIL2A_20261115');
+  assert.equal(layers[0].source, 'sentinel');
+  assert.equal(layers[0].resolution, 10);
+  const item = await loadSceneById('sentinel:S2B_one', undefined, async url => {
+    assert.ok(url.endsWith('/sentinel-2-l2a/items/S2B_one'));
+    return response(scene('S2B_one', '2026-11-07', 'sentinel-2-l2a'));
+  });
+  assert.equal(item.id, 'sentinel:S2B_one');
+  assert.equal(await loadSceneById('sentinel:../../secret'), null);
+  const definition = await tileDefinition(layers[0], undefined, async () => response({ tiles: ['https://planetarycomputer.microsoft.com/api/data/v1/item/tiles/WebMercatorQuad/{z}/{x}/{y}@1x?collection=sentinel-2-l2a'] }));
+  assert.equal(definition.nativeZoom, 14);
 });

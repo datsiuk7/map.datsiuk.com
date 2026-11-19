@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'datsiuk-map-credentials-v1';
-export const KEY_SOURCES = ['maptiler', 'mapbox', 'gamma'];
+export const KEY_SOURCES = ['maptiler', 'mapbox'];
 
 export function validateKey(source, value) {
   if (!KEY_SOURCES.includes(source)) throw new Error('Невідомий сервіс.');
@@ -31,6 +31,13 @@ export class CredentialStore {
         this.keys = keys;
         this.remember = mode === 'local';
         this.storageMode = mode;
+        // Drop keys of services the site no longer uses (the former Gamma Earth key).
+        if (Object.keys(saved.keys).some(source => !KEY_SOURCES.includes(source))) {
+          try {
+            if (KEY_SOURCES.some(source => keys[source])) storage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, keys }));
+            else { storage.removeItem(STORAGE_KEY); this.remember = false; this.storageMode = 'memory'; }
+          } catch { /* The stale entry is ignored either way. */ }
+        }
         break;
       } catch { /* A blocked or malformed store leaves the map usable. */ }
     }
@@ -74,6 +81,5 @@ export function redactSecrets(message, keys = []) {
   for (const key of keys.filter(Boolean)) {
     text = text.split(key).join('[ключ приховано]').split(encodeURIComponent(key)).join('[ключ приховано]');
   }
-  return text.replace(/([?&](?:key|access_token)=)[^\s&#]+/gi, '$1[приховано]')
-    .replace(/(api\.gamma\.earth\/jobs\/)[^\s/?#]+/gi, '$1[приховано]').slice(0, 500);
+  return text.replace(/([?&](?:key|access_token)=)[^\s&#]+/gi, '$1[приховано]').slice(0, 500);
 }

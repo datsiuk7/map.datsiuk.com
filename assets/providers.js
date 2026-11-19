@@ -5,7 +5,80 @@ import { credentials } from './credentials.js';
 
 export const PC = 'https://planetarycomputer.microsoft.com';
 const WAYBACK = 'https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer';
-const COLLECTIONS = { landsat: 'landsat-c2-l2' };
+const COLLECTIONS = { landsat: 'landsat-c2-l2', sentinel: 'sentinel-2-l2a' };
+// Ground sampling and the deepest useful tile level of each archive.
+export const SCENE_DETAIL = { landsat: { resolution: 30, nativeZoom: 12 }, sentinel: { resolution: 10, nativeZoom: 14 } };
+// Open imagery whose dates are known in advance, so no catalogue request is needed.
+// EOX Sentinel-2 cloudless: yearly cloud-free mosaics, 10 m (CC BY-NC-SA 4.0, 2018+; CC BY 4.0, 2017).
+export const EOX_YEARS = [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025];
+// NASA GIBS MODIS Terra true colour: one global image per day since 24.02.2000, 250 m.
+export const MODIS_START = '2000-02-24';
+const WORLD = [-180, -85.0511, 180, 85.0511];
+const OPEN_SOURCES = new Set(['eox', 'modis']);
+export const isOpenSource = source => OPEN_SOURCES.has(source);
+
+export function eoxLayer(year) {
+  year = Number(year);
+  if (!EOX_YEARS.includes(year)) return null;
+  return {
+    id: `eox:${year}`, itemId: String(year), source: 'eox', date: `${year}-07-01`, dateLabel: `${year} рік`,
+    dateKind: 'mosaic', resolution: 10, bounds: WORLD
+  };
+}
+
+const DAY = 86400000;
+const isoDay = time => new Date(time).toISOString().slice(0, 10);
+const MODIS_TILES = 'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/MODIS_Terra_CorrectedReflectance_TrueColor/default';
+
+export function modisLayer(date, now = Date.now()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isoDay(Date.parse(`${date}T00:00:00Z`) || 0) !== date) return null;
+  if (date < MODIS_START || date > isoDay(now)) return null;
+  return { id: `modis:${date}`, itemId: date, source: 'modis', date, dateKind: 'acquisition', resolution: 250, bounds: WORLD };
+}
+
+// GIBS answers days without data with an empty tile lacking Layer-Time-Actual. The list starts
+// at the newest day that has an image around the map centre (today once the satellite passed).
+const modisNewestCache = new Map();
+export async function modisNewest(center, signal, fetcher = fetch, now = Date.now()) {
+  const { level, row, column } = tileCoordinates(center, 6);
+  const key = `${level}/${row}/${column}:${isoDay(now)}`;
+  if (modisNewestCache.has(key)) return modisNewestCache.get(key);
+  let newest = isoDay(now - DAY);
+  for (let back = 0; back < 8; back += 1) {
+    const date = isoDay(now - back * DAY);
+    let response;
+    try {
+      response = await fetcher(`${MODIS_TILES}/${date}/GoogleMapsCompatible_Level9/${level}/${row}/${column}.jpg`, { signal, cache: 'no-store' });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      return newest; // The map still works; it may open on an empty day.
+    }
+    if (response.ok && response.headers?.get('layer-time-actual')) { newest = date; break; }
+  }
+  modisNewestCache.set(key, newest);
+  return newest;
+}
+
+let modisCache = null;
+export function openCatalog(source, last = isoDay(Date.now())) {
+  if (source === 'eox') return EOX_YEARS.map(eoxLayer).reverse();
+  if (source !== 'modis') return [];
+  if (modisCache?.last !== last) {
+    const layers = [];
+    for (let time = Date.parse(`${last}T00:00:00Z`), start = Date.parse(`${MODIS_START}T00:00:00Z`); time >= start; time -= 86400000) {
+      const date = isoDay(time);
+      layers.push({ id: `modis:${date}`, itemId: date, source: 'modis', date, dateKind: 'acquisition', resolution: 250, bounds: WORLD });
+    }
+    modisCache = { last, layers };
+  }
+  return modisCache.layers;
+}
+
+function openTiles(layer) {
+  if (layer.source === 'eox') return { template: `https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-${layer.itemId}_3857/default/g/{z}/{y}/{x}.jpg`, nativeZoom: 14 };
+  return { template: `${MODIS_TILES}/${layer.itemId}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`, nativeZoom: 9 };
+}
+
 const catalogCache = new ResourceCache({ maxEntries: 16, ttl: 1200000, storage: persistentStore('catalogs', 16) });
 const metadataCache = new ResourceCache({ maxEntries: 128, ttl: 86400000, storage: persistentStore('metadata', 128) });
 // URLs containing visitor keys stay in memory, never in IndexedDB.
@@ -64,6 +137,8 @@ export async function loadWayback(signal) {
 
 export function catalogKey(source, center, zoom, wayback = []) {
   if (isBasemap(source)) return `basemap:${source}`;
+  if (source === 'modis') { const { level, row, column } = tileCoordinates(center, 6); return `open:modis:${level}/${row}/${column}`; }
+  if (isOpenSource(source)) return `open:${source}`;
   if (source !== 'esri') return `${source}:${sceneArea(center).key}`;
   const tile = tileCoordinates(center, zoom);
   return `esri:${wayback[0]?.id}:${wayback.length}:${tile.level}/${tile.row}/${tile.column}`;
@@ -71,6 +146,8 @@ export function catalogKey(source, center, zoom, wayback = []) {
 
 export function loadCatalog(source, wayback, center, zoom, signal, force = false) {
   if (isBasemap(source)) return Promise.resolve([basemapLayer(source)]);
+  if (source === 'modis') return modisNewest(center, signal).then(last => openCatalog('modis', last));
+  if (isOpenSource(source)) return Promise.resolve(openCatalog(source));
   if (source !== 'esri' && !Object.hasOwn(COLLECTIONS, source)) return Promise.resolve([]);
   return catalogCache.get(catalogKey(source, center, zoom, wayback), requestSignal => source === 'esri'
     ? localWayback(wayback, center, zoom, requestSignal)
@@ -105,7 +182,7 @@ export function sceneLayer(item) {
   return {
     id: `${source}:${item.id}`, itemId: item.id, source, date, dateKind: 'acquisition',
     collection: item.collection, cloud: item.properties['eo:cloud_cover'],
-    resolution: 30,
+    resolution: SCENE_DETAIL[source].resolution,
     bounds: item.bbox, geometry: item.geometry, tilejson: tilejson.href
   };
 }
@@ -143,6 +220,8 @@ export async function loadSceneById(id, signal, fetcher = fetch) {
   if (id.startsWith('basemap:')) return basemapLayer(id.slice(8));
   const separator = id.indexOf(':');
   const source = id.slice(0, separator), itemId = id.slice(separator + 1);
+  if (source === 'eox') return eoxLayer(itemId);
+  if (source === 'modis') return modisLayer(itemId);
   if (!COLLECTIONS[source] || !/^[A-Za-z0-9_.-]+$/.test(itemId)) return null;
   const load = requestSignal => fetchJson(`${PC}/api/stac/v1/collections/${COLLECTIONS[source]}/items/${encodeURIComponent(itemId)}`, requestSignal, fetcher).then(sceneLayer);
   return fetcher === fetch ? metadataCache.get(`scene:${id}`, load, { signal }) : load(signal);
@@ -205,11 +284,12 @@ export async function tileDefinition(layer, signal, fetcher = fetch, viewpoint) 
     }
   }
   if (layer.source === 'esri') return { template: layer.template, nativeZoom: 18 };
+  if (isOpenSource(layer.source)) return openTiles(layer);
   const load = async requestSignal => {
     const data = await fetchJson(layer.tilejson, requestSignal, fetcher);
     const template = data.tiles?.[0];
     if (!template || new URL(template).origin !== PC) throw new Error('Сервіс не надав зображення');
-    return { template, nativeZoom: 12, bounds: layer.bounds || data.bounds };
+    return { template, nativeZoom: SCENE_DETAIL[layer.source]?.nativeZoom ?? 12, bounds: layer.bounds || data.bounds };
   };
   return fetcher === fetch ? metadataCache.get(`tiles:${layer.id}`, load, { signal }) : load(signal);
 }

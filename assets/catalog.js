@@ -3,7 +3,10 @@ import { BASEMAPS, isBasemap } from './basemaps.js';
 export const SOURCES = {
   ...Object.fromEntries(Object.entries(BASEMAPS).map(([id, layer]) => [id, { name: layer.shortName, priority: 0, kind: 'basemap' }])),
   esri: { name: 'Esri', priority: 0 },
-  landsat: { name: 'Landsat', priority: 2 }
+  sentinel: { name: 'Sentinel-2', priority: 1 },
+  eox: { name: 'Sentinel-2 cloudless', priority: 2 },
+  landsat: { name: 'Landsat', priority: 3 },
+  modis: { name: 'NASA MODIS', priority: 4 }
 };
 
 export function boundedNumber(value, fallback, min, max) {
@@ -14,9 +17,8 @@ export function boundedNumber(value, fallback, min, max) {
 
 export function providerForId(id) {
   if (id?.startsWith('basemap:') && isBasemap(id.slice(8))) return id.slice(8);
-  if (id?.startsWith('sentinel:')) return 'esri-live';
   const source = id?.split(':')[0];
-  return source === 'landsat' ? source : 'esri';
+  return ['landsat', 'sentinel', 'eox', 'modis'].includes(source) ? source : 'esri';
 }
 
 export function readState(url) {
@@ -25,15 +27,13 @@ export function readState(url) {
   const validView = parts.length === 3 && parts.every(part => part !== '' && Number.isFinite(Number(part)));
   const provider = side => {
     const requested = params.get(`${side}Provider`);
-    if (requested === 'sentinel') return 'esri-live';
     if (Object.hasOwn(SOURCES, requested)) return requested;
     if (params.get(side)) return providerForId(params.get(side));
     return params.has(`${side}Provider`) ? 'esri' : 'esri-live';
   };
   return {
-    // Retired Sentinel links must not restore an unselectable or blurry scene.
-    left: params.get('left')?.startsWith('sentinel:') ? null : params.get('left'),
-    right: params.get('right')?.startsWith('sentinel:') ? null : params.get('right'),
+    left: params.get('left'),
+    right: params.get('right'),
     leftProvider: provider('left'),
     rightProvider: provider('right'),
     single: params.get('mode') === 'single',

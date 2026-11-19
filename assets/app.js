@@ -6,14 +6,15 @@ import { BASEMAPS, isBasemap } from './basemaps.js';
 import { ProviderHealth, providerLabel } from './provider-health.js';
 import { credentials, KEY_SOURCES, redactSecrets } from './credentials.js';
 import { setupConnections } from './connections-ui.js';
-import { setupPhotos } from './photos-ui.js';
 
 const $ = id => document.getElementById(id);
 const app = document.querySelector('.app');
 const stage = $('stage'), toolbar = $('toolbar'), divider = $('divider');
 const state = readState(new URL(location.href));
 const formatDate = date => date.split('-').reverse().join('.');
-const layerCaption = layer => isBasemap(layer.source) ? `${SOURCES[layer.source].name} · ${layer.label}` : formatDate(layer.date);
+// Yearly mosaics are labelled by year rather than by a nominal day.
+const dateText = layer => layer.dateLabel || formatDate(layer.date);
+const layerCaption = layer => isBasemap(layer.source) ? `${SOURCES[layer.source].name} · ${layer.label}` : dateText(layer);
 const views = {};
 let healthStorage;
 try { healthStorage = window.localStorage; } catch { /* Private browser modes can block storage. */ }
@@ -62,9 +63,11 @@ for (const side of ['left', 'right']) {
   const provider = state[`${side}Provider`];
   const savedId = state[side] && providerForId(state[side]) === provider ? state[side] : null;
   const map = L.map($(`${side}Map`), {
-    attributionControl: false, fadeAnimation: false, zoomControl: side === 'left',
+    attributionControl: false, fadeAnimation: false, zoomControl: false,
     worldCopyJump: true, minZoom: 2, maxZoom: 18, trackResize: false
   }).setView(state.center, state.zoom);
+  // Bottom-left, above the date badge: the top corners belong to the panel.
+  if (side === 'left') L.control.zoom({ position: 'bottomleft' }).addTo(map);
   const mapPane = map.getPane('mapPane');
   const visualPane = document.createElement('div');
   visualPane.className = 'visual-zoom-pane';
@@ -185,7 +188,9 @@ function updateUrl(immediate = false) {
 
 function positionPanelToggle() {
   const collapsed = app.classList.contains('panel-collapsed');
-  $('panelToggle').style.top = collapsed ? '8px' : `${toolbar.offsetHeight + 6}px`;
+  // On wide screens the panel is a top bar plus a card at each side: anchor to the bar.
+  const bar = getComputedStyle($('topbar')).display === 'contents' ? toolbar : $('topbar');
+  $('panelToggle').style.top = collapsed ? '8px' : `${bar.offsetHeight + 6}px`;
   $('panelToggle').textContent = collapsed ? 'Панель' : 'Сховати';
   $('panelToggle').setAttribute('aria-expanded', String(!collapsed));
   toolbar.inert = collapsed;
@@ -260,6 +265,8 @@ function metadata(layer) {
     ? 'Архів для чіткості · дата залежить від ділянки'
     : 'Поточна мозаїка · дата залежить від ділянки';
   if (layer.source === 'esri') return 'Дата публікації карти; зйомка може бути давнішою';
+  if (layer.source === 'eox') return `Безхмарна мозаїка за ${layer.itemId} рік · 10 м/пікс.`;
+  if (layer.source === 'modis') return 'Щоденний знімок NASA · 250 м/пікс. · хмари не відфільтровані';
   const cloud = Number.isFinite(layer.cloud) ? ` · хмари ${Math.round(layer.cloud)}%` : '';
   return `Дата зйомки · ${layer.resolution} м/пікс.${cloud}`;
 }
@@ -293,7 +300,9 @@ async function displayLayer(view, layer, retry = false, waitMs = 0) {
   if (view.mode === 'manual' && !view.selectionDate) view.selectionDate = layer.date;
   view.failed = false;
   view.source.textContent = `(${SOURCES[layer.source].name})`;
-  view.source.title = isBasemap(layer.source) ? layer.title : layer.source === 'esri' ? 'Esri World Imagery Wayback' : `${SOURCES[layer.source].name} · Microsoft Planetary Computer`;
+  view.source.title = isBasemap(layer.source) ? layer.title : layer.source === 'esri' ? 'Esri World Imagery Wayback'
+    : layer.source === 'eox' ? 'Sentinel-2 cloudless · EOX IT Services GmbH' : layer.source === 'modis' ? 'MODIS Terra · NASA GIBS'
+    : `${SOURCES[layer.source].name} · Microsoft Planetary Computer`;
   view.meta.textContent = metadata(layer);
   view.meta.title = layer.note || metadata(layer);
   view.badge.textContent = view.displayedLayer
@@ -352,7 +361,7 @@ async function displayLayer(view, layer, retry = false, waitMs = 0) {
           view.pendingTile = null;
           view.displayedLayer = layer;
           updateImageryAttribution();
-          tile.setOpacity(1).setZIndex(1);
+                  tile.setOpacity(1).setZIndex(1);
           if (previous) view.map.removeLayer(previous);
           presented = true;
           prefetchNeighbors(view);
@@ -364,7 +373,7 @@ async function displayLayer(view, layer, retry = false, waitMs = 0) {
         view.meta.textContent = metadata(layer);
         view.meta.title = layer.note || metadata(layer);
         view.badge.setAttribute('aria-busy', 'false');
-        view.badge.textContent = isBasemap(layer.source) ? layerCaption(layer) : `${formatDate(layer.date)} · ${SOURCES[layer.source].name}${layer.resolution ? ` · ${layer.resolution} м` : ''}`;
+        view.badge.textContent = isBasemap(layer.source) ? layerCaption(layer) : `${dateText(layer)} · ${SOURCES[layer.source].name}${layer.resolution ? ` · ${layer.resolution} м` : ''}`;
       }
     });
     view.pendingTile = tile;
@@ -460,7 +469,7 @@ function renderDateControls(view, choices, selected) {
   const filtered = filterDates(choices, view.yearFilter, view.monthFilter);
   const datesKey = filtered.map(layer => layer.id).join(',');
   if (view.datesKey !== datesKey) {
-    view.select.replaceChildren(...filtered.map(layer => option(layer.id, formatDate(layer.date))));
+    view.select.replaceChildren(...filtered.map(layer => option(layer.id, dateText(layer))));
     view.datesKey = datesKey;
   }
   view.select.value = selected.id;
@@ -469,8 +478,8 @@ function renderDateControls(view, choices, selected) {
   const newer = adjacentLayer(choices, selected.id, 'newer');
   view.previous.disabled = !older;
   view.next.disabled = !newer;
-  view.previous.title = older ? `Попередня дата: ${formatDate(older.date)}` : 'Це найдавніша доступна дата';
-  view.next.title = newer ? `Наступна дата: ${formatDate(newer.date)}` : 'Це найновіша доступна дата';
+  view.previous.title = older ? `Попередня дата: ${dateText(older)}` : 'Це найдавніша доступна дата';
+  view.next.title = newer ? `Наступна дата: ${dateText(newer)}` : 'Це найновіша доступна дата';
   view.position.textContent = `${choices.length - choices.findIndex(layer => layer.id === selected.id)} з ${choices.length}`;
 }
 
@@ -500,7 +509,7 @@ function renderCatalogNow() {
       view.datesKey = view.yearsKey = view.monthsKey = null;
       view.select.disabled = !choices.length;
       // A saved scene may still be loading; allow choosing a known date instead.
-      for (const layer of choices) view.select.appendChild(option(layer.id, formatDate(layer.date)));
+      for (const layer of choices) view.select.appendChild(option(layer.id, dateText(layer)));
       view.select.value = view.desiredId || '';
       for (const select of [view.yearSelect, view.monthSelect]) { select.replaceChildren(option('', '—')); select.disabled = true; }
       view.previous.disabled = true; view.next.disabled = true;
@@ -509,6 +518,7 @@ function renderCatalogNow() {
       if (!view.desiredId) {
         suspendView(view);
         view.badge.textContent = `${SOURCES[view.provider].name} · ${message.toLowerCase()}`;
+        view.badge.setAttribute('aria-busy', String(loading));
         view.meta.textContent = loading ? 'Дати для центру карти' : 'Спробуйте інше місце або провайдера';
       }
       continue;
@@ -710,6 +720,10 @@ for (const view of Object.values(views)) {
   view.next.addEventListener('click', () => chooseDate(view, adjacentLayer(view.choices, view.layer?.id, 'newer')));
   view.map.on('movestart zoomstart', () => { if (!syncing) interacting = true; });
 }
+// The centre marker is faint at rest and clear while the map moves (dates follow this point).
+let centerTimer;
+views.left.map.on('movestart zoomstart', () => { clearTimeout(centerTimer); stage.classList.add('map-moving'); });
+views.left.map.on('moveend zoomend', () => { clearTimeout(centerTimer); centerTimer = setTimeout(() => stage.classList.remove('map-moving'), 900); });
 toolbar.addEventListener('submit', searchLocation);
 $('labelsToggle').addEventListener('change', setLabels);
 $('visualZoomToggle').addEventListener('change', setVisualZoom);
@@ -801,44 +815,8 @@ credentials.subscribe(changed => {
   checkProviders();
 });
 
-function photoCredits(layer) {
-  if (layer.source === 'landsat') return 'NASA / USGS Landsat · Microsoft Planetary Computer';
-  if (layer.source === 'esri') return `Esri World Imagery Wayback${layer.attribution ? ` · ${layer.attribution}` : ''}`;
-  return layer.attribution || layer.title || SOURCES[layer.source].name;
-}
-
-// Describes what each visible map shows, so the photo covers exactly that area.
-function photoTargets() {
-  return Object.values(views).filter(view => isActive(view) && view.tile && view.displayedLayer && view.tile._url).map(view => {
-    const layer = view.displayedLayer, size = view.map.getSize(), bounds = view.tile.options.bounds && L.latLngBounds(view.tile.options.bounds);
-    const nativeZoom = view.tile.options.maxNativeZoom ?? 18;
-    return {
-      side: view.side, sideName: view.side === 'left' ? 'Ліва карта' : 'Права карта',
-      template: view.tile._url, source: layer.source, layerId: layer.id,
-      nativeZoom: isBasemap(layer.source) ? layer.nativeZoom ?? nativeZoom : nativeZoom, displayZoom: nativeZoom,
-      bounds: bounds ? [[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]] : null,
-      center: view.map.getCenter().wrap(), zoom: view.map.getZoom(), width: size.x, height: size.y,
-      magnification: visualZoom / 100,
-      title: isBasemap(layer.source) ? layer.shortName : SOURCES[layer.source].name,
-      label: isBasemap(layer.source) ? layer.label : formatDate(layer.date),
-      credits: `${photoCredits(layer)} · map.datsiuk.com`
-    };
-  });
-}
-
-setupPhotos({
-  getTargets: photoTargets,
-  showStatus,
-  onShowOnMap(record) {
-    views.left.map.setView([record.center.lat, record.center.lng], record.zoom, { animate: false });
-    if (record.magnification > 1) {
-      $('visualZoomToggle').checked = true;
-      $('visualZoom').value = String(Math.round(record.magnification * 100));
-      setVisualZoom();
-    }
-    showStatus(`Місце фото: ${record.title} · ${record.label}. Джерело на карті могло змінитися.`, 'info', 6000);
-  }
-});
+// Photo history was removed; free the space its IndexedDB database took (up to 400 MB).
+try { globalThis.indexedDB?.deleteDatabase('datsiuk-map-photos'); } catch {}
 
 ready = true;
 renderProviderHealth();

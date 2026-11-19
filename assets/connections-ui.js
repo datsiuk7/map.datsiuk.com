@@ -1,7 +1,7 @@
 import { KEY_SOURCES, validateKey, redactSecrets } from './credentials.js';
 import { checkConnection } from './connection-checks.js';
 
-const NAMES = { maptiler: 'MapTiler', mapbox: 'Mapbox', gamma: 'Gamma Earth' };
+const NAMES = { maptiler: 'MapTiler', mapbox: 'Mapbox' };
 
 export function setupConnections({ store, getView, onCheckResult = () => {}, onApplied = () => {} }) {
   const $ = id => document.getElementById(id);

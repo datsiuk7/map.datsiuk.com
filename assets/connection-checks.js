@@ -25,13 +25,6 @@ export async function checkConnection(source, value, { center = { lat: 50.4501, 
     return response;
   };
   try {
-    if (source === 'gamma') {
-      const response = await request(`https://api.gamma.earth/jobs/${encodeURIComponent(key)}?limit=1`);
-      const data = await response.json();
-      const balance = data.credits?.total_balance;
-      if (typeof balance !== 'number' || !Number.isFinite(balance)) throw new Error('Gamma Earth не повернув баланс. Перевірте доступ до API для свого тарифу.');
-      return { message: `Підключено · ${balance.toLocaleString('uk-UA')} кредитів. Обробку не запускали.`, balance };
-    }
     const tile = tileCoordinates(center, Math.min(zoom, 16));
     let url;
     if (source === 'mapbox') {
